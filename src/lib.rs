@@ -81,6 +81,57 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
         Ok(())
     }
 
+    pub fn start_threadpool(&mut self,
+            thread_count: u8) -> std::io::Result<()> {
+        // set shutdown
+        self.shutdown.store(false, Ordering::Relaxed);
+
+        // start worker threads
+        for _ in 0..thread_count {
+            // clone variables
+            let listener_clone = self.listener.try_clone()?;
+            listener_clone.set_nonblocking(true)?;
+            let shutdown_clone = self.shutdown.clone();
+            let sleep_duration = Duration::from_millis(self.sleep_ms);
+            let stream_handler_clone = self.stream_handler.clone();
+
+            let join_handle = std::thread::spawn(move || {
+                for result in listener_clone.incoming() {
+                    match result {
+                        Ok(mut stream) => {
+                            // process stream
+                            match stream_handler_clone.process(&mut stream) {
+                                Err(ref e) if e.kind() != std::io
+                                        ::ErrorKind::UnexpectedEof => {
+                                    error!("failed to process stream {}", e);
+                                },
+                                _ => {},
+                            }
+                        },
+                        Err(ref e) if e.kind() ==
+                                std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(sleep_duration);
+                        },
+                        Err(ref e) if e.kind() !=
+                                std::io::ErrorKind::WouldBlock => {
+                            error!("failed to connect client: {}", e);
+                        },
+                        _ => {},
+                    }
+
+                    // check if shutdown
+                    if shutdown_clone.load(Ordering::Relaxed) {
+                        break;
+                    }
+                }
+            });
+
+            self.join_handles.push(join_handle);
+        }
+
+        Ok(())
+    }
+
     pub fn stop(mut self) -> std::thread::Result<()> {
         if self.shutdown.load(Ordering::Relaxed) {
             return Ok(());
