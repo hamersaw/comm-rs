@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate log;
 
+use std::error::Error;
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,7 +9,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 pub trait StreamHandler where Self: Send + Sync {
-    fn process(&self, stream: &mut TcpStream) -> std::io::Result<()>;
+    fn process(&self, stream: &mut TcpStream) -> Result<(), Box<dyn Error>>;
 }
 
 pub struct Server<T: 'static + StreamHandler + Send + Sync> {
@@ -50,12 +51,9 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
                         let stream_handler = stream_handler_clone.clone();
                         std::thread::spawn(move || {
                             // process stream
-                            match stream_handler.process(&mut stream) {
-                                Err(ref e) if e.kind() != std::io
-                                        ::ErrorKind::UnexpectedEof => {
-                                    error!("failed to process stream {}", e);
-                                },
-                                _ => {},
+                            if let Err(e) = stream_handler
+                                    .process(&mut stream) {
+                                warn!("handler error: {}", e);
                             }
                         });
                     },
@@ -100,12 +98,9 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
                     match result {
                         Ok(mut stream) => {
                             // process stream
-                            match stream_handler_clone.process(&mut stream) {
-                                Err(ref e) if e.kind() != std::io
-                                        ::ErrorKind::UnexpectedEof => {
-                                    error!("failed to process stream {}", e);
-                                },
-                                _ => {},
+                            if let Err(e) = stream_handler_clone
+                                    .process(&mut stream) {
+                                warn!("handler error: {}", e);
                             }
                         },
                         Err(ref e) if e.kind() ==
