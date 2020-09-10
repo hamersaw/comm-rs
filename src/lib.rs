@@ -24,7 +24,7 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
     pub fn new(listener: TcpListener, sleep_ms: u64,
             stream_handler: Arc<T>) -> Server<T> {
         info!("initailizing server [local_address={:?}, sleep_ms={}]",
-            listener.local_addr, sleep_m);
+            listener.local_addr(), sleep_ms);
         Server {
             listener: listener,
             sleep_ms: sleep_ms,
