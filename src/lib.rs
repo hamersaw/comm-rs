@@ -23,6 +23,8 @@ pub struct Server<T: 'static + StreamHandler + Send + Sync> {
 impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
     pub fn new(listener: TcpListener, sleep_ms: u64,
             stream_handler: Arc<T>) -> Server<T> {
+        info!("initailizing server [local_address={:?}, sleep_ms={}]",
+            listener.local_addr, sleep_m);
         Server {
             listener: listener,
             sleep_ms: sleep_ms,
@@ -33,6 +35,8 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
     }
 
     pub fn start(&mut self) -> std::io::Result<()> {
+        info!("starting server");
+
         // set shutdown
         self.shutdown.store(false, Ordering::Relaxed);
 
@@ -81,6 +85,8 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
 
     pub fn start_threadpool(&mut self,
             thread_count: u8) -> std::io::Result<()> {
+        info!("starting threadpool [thread_count={}]", thread_count);
+
         // set shutdown
         self.shutdown.store(false, Ordering::Relaxed);
 
@@ -128,6 +134,7 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
     }
 
     pub fn stop(mut self) -> std::thread::Result<()> {
+        info!("stopping");
         if self.shutdown.load(Ordering::Relaxed) {
             return Ok(());
         }
