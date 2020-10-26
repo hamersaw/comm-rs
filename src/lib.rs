@@ -26,10 +26,10 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
         info!("initailizing server [local_address={:?}, sleep_ms={}]",
             listener.local_addr(), sleep_ms);
         Server {
-            listener: listener,
-            sleep_ms: sleep_ms,
+            listener,
+            sleep_ms,
             shutdown: Arc::new(AtomicBool::new(true)),
-            stream_handler: stream_handler,
+            stream_handler,
             join_handles: Vec::new(),
         }
     }
@@ -143,7 +143,7 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
         self.shutdown.store(true, Ordering::Relaxed);
 
         // join threads
-        while self.join_handles.len() != 0 {
+        while !self.join_handles.is_empty() {
             let join_handle = self.join_handles.pop().unwrap();
             join_handle.join()?;
         }
@@ -154,15 +154,17 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::Arc;
+    use super::{Server, StreamHandler};
+
     #[test]
     fn cycle_server() {
-        use std::net::{TcpListener, TcpStream};
-        use std::sync::Arc;
-        use super::{Server, StreamHandler};
-
         struct NullHandler { }
         impl StreamHandler for NullHandler {
-            fn process(&self, _: &mut TcpStream) -> std::io::Result<()> {
+            fn process(&self, _: &mut TcpStream)
+                    -> Result<(), Box<dyn Error>> {
                 Ok(())
             }
         }
@@ -175,7 +177,6 @@ mod tests {
 
         // start server
         server.start().expect("server start");
-        //server.start_threadpool(8).expect("server start");
 
         // stop server
         server.stop().expect("server stop");
