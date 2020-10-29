@@ -155,28 +155,118 @@ impl<T: 'static + StreamHandler + Send + Sync> Server<T> {
 #[cfg(test)]
 mod tests {
     use std::error::Error;
+    use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::sync::Arc;
+    use std::time::Duration;
+
     use super::{Server, StreamHandler};
 
     #[test]
     fn cycle_server() {
+        let address = "127.0.0.1:18000";
+
         struct NullHandler { }
         impl StreamHandler for NullHandler {
-            fn process(&self, _: &mut TcpStream)
+            fn process(&self, stream: &mut TcpStream)
                     -> Result<(), Box<dyn Error>> {
-                Ok(())
+                let mut buf = vec!(0u8; 5);
+                stream.read_exact(&mut buf).expect("stream read exact");
+
+                let data = String::from_utf8(buf)
+                    .expect("string decode");
+
+                let data_reference: &str = &data;
+                match data_reference {
+                    "hello" => Ok(()),
+                    _ => Err("test".into()),
+                }
             }
         }
 
         // open server
-        let listener = TcpListener::bind("127.0.0.1:15605")
+        let listener = TcpListener::bind(&address)
             .expect("TcpListener bind");
         let stream_handler = Arc::new(NullHandler{ });
         let mut server = Server::new(listener, 50, stream_handler);
 
         // start server
         server.start().expect("server start");
+
+        // valid connection
+        {
+            let mut stream = TcpStream::connect(&address)
+                .expect("tcp stream connect");
+
+            stream.write_all(b"hello").expect("stream write all");
+        }
+
+        // invalid connection
+        {
+            let mut stream = TcpStream::connect(&address)
+                .expect("tcp stream connect");
+
+            stream.write_all(b"world").expect("stream write all");
+        }
+
+        // sleep for 1 second
+        let sleep_duration = Duration::from_millis(1000);
+        std::thread::sleep(sleep_duration);
+
+        // stop server
+        server.stop().expect("server stop");
+    }
+
+    #[test]
+    fn cycle_threadpool_server() {
+        let address = "127.0.0.1:18001";
+
+        struct NullHandler { }
+        impl StreamHandler for NullHandler {
+            fn process(&self, stream: &mut TcpStream)
+                    -> Result<(), Box<dyn Error>> {
+                let mut buf = vec!(0u8; 5);
+                stream.read_exact(&mut buf).expect("stream read exact");
+
+                let data = String::from_utf8(buf)
+                    .expect("string decode");
+
+                let data_reference: &str = &data;
+                match data_reference {
+                    "hello" => Ok(()),
+                    _ => Err("test".into()),
+                }
+            }
+        }
+
+        // open server
+        let listener = TcpListener::bind(&address)
+            .expect("TcpListener bind");
+        let stream_handler = Arc::new(NullHandler{ });
+        let mut server = Server::new(listener, 50, stream_handler);
+
+        // start server
+        server.start_threadpool(2).expect("server start");
+
+        // valid connection
+        {
+            let mut stream = TcpStream::connect(&address)
+                .expect("tcp stream connect");
+
+            stream.write_all(b"hello").expect("stream write all");
+        }
+
+        // invalid connection
+        {
+            let mut stream = TcpStream::connect(&address)
+                .expect("tcp stream connect");
+
+            stream.write_all(b"world").expect("stream write all");
+        }
+
+        // sleep for 1 second
+        let sleep_duration = Duration::from_millis(1000);
+        std::thread::sleep(sleep_duration);
 
         // stop server
         server.stop().expect("server stop");
