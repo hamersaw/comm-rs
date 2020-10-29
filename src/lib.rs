@@ -162,27 +162,49 @@ mod tests {
 
     use super::{Server, StreamHandler};
 
+    struct NullHandler { }
+
+    impl StreamHandler for NullHandler {
+        fn process(&self, stream: &mut TcpStream)
+                -> Result<(), Box<dyn Error>> {
+            let mut buf = vec!(0u8; 5);
+            stream.read_exact(&mut buf).expect("stream read exact");
+
+            let data = String::from_utf8(buf)
+                .expect("string decode");
+
+            let data_reference: &str = &data;
+            match data_reference {
+                "hello" => Ok(()),
+                _ => Err("test".into()),
+            }
+        }
+    }
+
+    fn execute_connection_sequence(address: &str)
+            -> Result<(), Box<dyn Error>> {
+        {
+            // valid connection
+            let mut stream = TcpStream::connect(address)?;
+            stream.write_all(b"hello")?;
+        }
+
+        {
+            // invalid connection
+            let mut stream = TcpStream::connect(address)?;
+            stream.write_all(b"world")?;
+        }
+
+        // sleep for 1 second
+        let sleep_duration = Duration::from_millis(1000);
+        std::thread::sleep(sleep_duration);
+
+        Ok(())
+    }
+
     #[test]
     fn cycle_server() {
         let address = "127.0.0.1:18000";
-
-        struct NullHandler { }
-        impl StreamHandler for NullHandler {
-            fn process(&self, stream: &mut TcpStream)
-                    -> Result<(), Box<dyn Error>> {
-                let mut buf = vec!(0u8; 5);
-                stream.read_exact(&mut buf).expect("stream read exact");
-
-                let data = String::from_utf8(buf)
-                    .expect("string decode");
-
-                let data_reference: &str = &data;
-                match data_reference {
-                    "hello" => Ok(()),
-                    _ => Err("test".into()),
-                }
-            }
-        }
 
         // open server
         let listener = TcpListener::bind(&address)
@@ -193,25 +215,9 @@ mod tests {
         // start server
         server.start().expect("server start");
 
-        // valid connection
-        {
-            let mut stream = TcpStream::connect(&address)
-                .expect("tcp stream connect");
-
-            stream.write_all(b"hello").expect("stream write all");
-        }
-
-        // invalid connection
-        {
-            let mut stream = TcpStream::connect(&address)
-                .expect("tcp stream connect");
-
-            stream.write_all(b"world").expect("stream write all");
-        }
-
-        // sleep for 1 second
-        let sleep_duration = Duration::from_millis(1000);
-        std::thread::sleep(sleep_duration);
+        // execute connections
+        execute_connection_sequence(&address)
+            .expect("execute connections");
 
         // stop server
         server.stop().expect("server stop");
@@ -220,24 +226,6 @@ mod tests {
     #[test]
     fn cycle_threadpool_server() {
         let address = "127.0.0.1:18001";
-
-        struct NullHandler { }
-        impl StreamHandler for NullHandler {
-            fn process(&self, stream: &mut TcpStream)
-                    -> Result<(), Box<dyn Error>> {
-                let mut buf = vec!(0u8; 5);
-                stream.read_exact(&mut buf).expect("stream read exact");
-
-                let data = String::from_utf8(buf)
-                    .expect("string decode");
-
-                let data_reference: &str = &data;
-                match data_reference {
-                    "hello" => Ok(()),
-                    _ => Err("test".into()),
-                }
-            }
-        }
 
         // open server
         let listener = TcpListener::bind(&address)
@@ -248,25 +236,9 @@ mod tests {
         // start server
         server.start_threadpool(2).expect("server start");
 
-        // valid connection
-        {
-            let mut stream = TcpStream::connect(&address)
-                .expect("tcp stream connect");
-
-            stream.write_all(b"hello").expect("stream write all");
-        }
-
-        // invalid connection
-        {
-            let mut stream = TcpStream::connect(&address)
-                .expect("tcp stream connect");
-
-            stream.write_all(b"world").expect("stream write all");
-        }
-
-        // sleep for 1 second
-        let sleep_duration = Duration::from_millis(1000);
-        std::thread::sleep(sleep_duration);
+        // execute connections
+        execute_connection_sequence(&address)
+            .expect("execute connections");
 
         // stop server
         server.stop().expect("server stop");
